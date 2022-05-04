@@ -1,0 +1,10 @@
+version: '3.9'
+services:
+  latex-arch:
+    container_name: diemv4-arch
+    restart: unless-stopped
+    volumes:
+      - './:/root/data'
+    image: 117503445/latex-arch
+    stdin_open: true
+    tty: true

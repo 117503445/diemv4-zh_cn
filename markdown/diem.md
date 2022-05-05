@@ -127,7 +127,7 @@ The leader is successful if it populates the network with its proposal before ho
 
 HotStuff, on the other hand, is a three-phase BFT replication protocol that has linear communication overhead in the common-case. In HotStuff, the first and second phases of a round are similar to PBFT, but the result of the second phase is a certified certificate, or a QC-of-QC, rather then a commit decision. A commit decision is reached upon getting a quorum of votes on the QC-of-QC (a QC-of-QC-of-QC).
 
-DiemBFT的灵感来自线性三阶段HotStuff,但摆脱了三阶段延迟成本。相反，当领导者还具有活性时，它保持了HotStuff的通信线性，但在视图更改协议期间允许二次通信成本，以重新获得二阶段提交的能力
+DiemBFT的灵感来自线性三阶段HotStuff,但摆脱了三阶段延迟成本。相反，当领导者还具有活性时，它保持了HotStuff的通信线性，但在视图更改协议期间允许二次通信成本，以重新获得二阶段提交的能力。
  
 DiemBFT is inspired by the linear three-phase HotStuff, but gets rid of the three-step latency cost. Instead, it preserves the communication linearity of HotStuff when the leader is alive but allows for a quadratic cost during the view-change protocol to regain the ability to commit in two steps.
 
@@ -490,8 +490,7 @@ In practice, we may want slow validators to also get a chance to become leaders.
 - 如果块是由拜占庭（诚实）验证节点提出的，我们称它为拜占庭（诚实）的块。
 - 我们说B区块是被认证的，如果存在法定人数证书QC_B，使得 B.id = QC_B.VoteInfo.id
 - Bi←QC_i←B_i+1表示Bi区块由Bi+1区块中包含的法定人数证书QCi认证。我们还使用B←QC_B←B'表示QC_B证明了block B，并被 B' 扩展。
-- B_i ← *B_j 表示块 B_j 扩展了块 B_i。也就是说，存在一个序列
-B_i ← QC_i ← Bi+1 ← QCi+1 · · · ← QCj−1 ← Bj
+- B_i ← *B_j 表示块 B_j 扩展了块 B_i。也就是说，存在一个序列 B_i ← QC_i ← Bi+1 ← QCi+1 · · · ← QCj−1 ← Bj
 
 We begin with some notation.
 •	We call a block Byzantine (honest) if it was proposed by a Byzantine (honest) validator.
@@ -548,9 +547,13 @@ The next property follows from the quorum intersection, maximum number of Byzant
 Property 1. If a block is certified in a round, no other block can gather f + 1 non-Byzantine votes in the same round. Hence, at most one block is certified in each round.
 
 引理 3. 对于每个经过认证的块 B' ，使得 B'.round ≥ B.round 且 B 是全局直接提交的，则 B ←∗ B'。
+
 证明 让 r = B.round。根据属性1,对于每一个B'.round = r 的 B', 有 B ←∗ B'。
+
 现在我们通过归纳法证明这个引理在 r' > r 时成立。
+
 基本情况：设r' = r + 1.  B是全局直接提交的，因此根据定义1. 有f + 1个非拜占庭验证节点为 r' = r + 1 （在 Safety.make_vote） 轮中的一些块 Br+1 投票，使 B ← QC_B ← Br+1。基于属性 1，只有 Br+1 可以在 r' 轮次中被认证。
+
 迭代：我们假设引理适用于 r' − 1 > r 轮，并会证明这也适用于 r'。如果在 r' 轮没有认证块，那么这个归纳步骤是空的。否则，让 B' 是在 r' 轮中验证的块，并使 QC_B' 是 B' 的证书。B是全局直接提交的，所以根据定义1，存在 f + 1 个非拜占庭验证节点，这些节点在 r + 1 轮成功调用 Safety.make_vote ，设置了 Safety.highest_qc_round ← r 。v 是这些验证节点中的一个，也必定准备了被包含在 QC_B' 中的投票。 (因为 QC 结构需要 2f+1 个投票，一共有 3f+1 个验证节点)。
 
 令 B'' ← QC_B'' ← B' 且 r'' = B''.round = QC_B''.voteinfo.round. 有 2 中情况需要考虑。第一种情况，根据第r'' < r'轮的归纳假设（区块必须延伸较小的轮，以收集非拜占庭式投票并进行认证）有  B ←∗ B''。
@@ -578,6 +581,7 @@ For every locally committed block, there is a locally direct-committed block tha
 引理4. 当轮数小于r的诚实验证节点从另一个诚实验证节点收到r轮的提议或超时消息时，它进入r轮。
 
 证明 回想一下,诚实的验证节点发送的提议和超时消息是格式良好的,即包含第r - 1轮的TC或QC。当诚实验证节点接收并处理格式正确的超时或提议消息时，它会在 last_round_tc 轮次中调用 PaceMaker.advance_round_tc。如果 last_round_tc != ⊥，那么它是第 r-1 轮的 TC，验证节点进入第 r 轮。
+
 否则，tmo_info.high_qc（用于超时消息）或 block.qc（用于提议消息）的 process_certificate_qc 调用，内部会调用 PaceMaker.advance_round_qc, 这让验证节点进入第 r 轮。
 
 回想一下，leader 选举逻辑是在 LeaderElection.update_leaders 中实现的。我们将领导者诚实的轮询轮次称为诚实轮次，并注意存在无限多的诚实轮次。我们称提案在某轮投票中获得认证的领导者为该轮选举的被选举领导者。
@@ -588,7 +592,9 @@ Otherwise, process_certificate_qc call on tmo_info.high_qc (for timeout message)
 Recall that the leader election logic is implemented in LeaderElection.update_leaders. We refer to a round whose designated round-robin leader is honest as an honest-round and note that there are infinitely many honest-rounds. We refer to a leader whose proposal becomes certified at some round as the elected leader of the round.
 
 引理 5. 假设 r 是一个轮次 > r 的 QC。 然后，存在无限多个轮次 > r 的诚实的被选举领导者。
+
 证明  令 r' > r 是一个诚实的轮次，并有（诚实的）的轮询领导者 L。如果所有 2f + 1 个诚实的验证节点都将他们的 r'-1 轮的投票发送给 L，那么只有 L 可以发送第 r 轮提案。 提案必须发送，否则本轮无法形成 QC。
+
 如果某个诚实的验证节点没有将它的第 r'-1 轮投票发送给 L，那么在第 r'-3 轮中提议的区块 Br-3 必须被提交。 由于有无限多的高于 r的诚实轮，因此必须提交无限多的块。作为链质量的必然结果（第 4.4 节），最终必须提交一个诚实的块，这意味着一个诚实的领导者发送了提案。
  
 Lemma 5. Suppose r is such that a QC forms in all rounds > r. Then, there are infinitely many rounds > r with honest elected-leaders.
@@ -598,8 +604,11 @@ If some honest validator doesn’t send its round r' − 1 vote to L, then a blo
 引理 6. 如果诚实验证节点之间的轮次超时和消息延迟是有限的，那么所有诚实验证节点都会继续进入不断增加的轮次。
 
 证明 假设所有诚实验证节点都在第 r 轮或以上，令 v 成为第 r 轮中的诚实验证节点。
+
 我们首先证明某个诚实验证节点进入第 r+1 轮。如果所有 2f+1 个诚实验证节点在第 r 轮超时，那么 v 最终会收到 2f+1 条超时消息，形成一个 TC 并进入第 r+1 轮。否则，至少有一个诚实的验证节点 v'，没有为第 r 轮发送超时消息，则它进入第 r + 1 轮。
+
 如果一个 TC 在 > r 的任何轮次中形成，那么来自某个诚实验证节点的超时消息最终将传递给 v，根据引理 4 触发它进入更高的一轮。类似地，如果 v' 在 > r 的任何轮次中超时，那么它的超时消息最终会触发 v 进入更高的一轮。否则，v' 必须在所有轮次中都观察到一个轮次 > r 的 QC 。在这种情况下，根据引理 5，一个诚实的领导者在某轮 > r 中发送一个提案。该提案最终将交付给 v，触发它进入引理 4 的更高轮次。
+
 在最终同步的设定中，系统在全局稳定时间 (GST) 之后变为同步。古典意义上的活跃性来自属性3。
 
 Lemma 6. If the round timeouts and message delays between honest validators are finite, then all honest validators keep entering increasing rounds.
@@ -611,9 +620,13 @@ In an eventually synchronous setting, the system becomes synchronous after the t
 属性 3. 设 r 为 GST 之后的一轮。每个诚实的验证节点最终都会通过调用 Ledger.commit(B.id) 来在本地提交一些区块 B ，且 B.round > r。
 
 证明 根据引理 6，诚实节点无限期地增加轮次。
+
 如果轮 g,g +1,g +2 是诚实轮，我们说轮 g 是生成轮。我们将它们称为由 g 生成的轮次。我们使用两个生成轮 r' > r + 3 和 r'' ≥ r' + 3。
+
 如果没有诚实的验证节点使用基于信誉的方案来确定由 r' 生成的任何一轮的领导者，那么所有诚实的验证节点都同意连续 3 轮的诚实领导者。在这种情况下，他们都在本地直接提交在第 r' 轮中提出的区块——在属性 4（下一节）中得到证明，此时此证明完毕。
+
 否则，一些诚实的验证节点 v' 在由 r' 生成的一轮中使用信誉方案。为此，v' 必须在轮 ∈ [(r' - 3),(r' - 2),(r' - 1)] 中本地直接提交块 B'。如果 QC 在某轮 ≥ r' + 3 中从未形成，则 v' 超时并发送超时消息，并且此消息中的 high_commit_qc 允许每个接收者在本地提交块 B'（或更高）。
+
 因此，假设 QC 在 ≥ r'' 的轮次中形成（因为 r'' ≥ r' + 3）。如果诚实的轮询领导者在 r'' 生成的诚实轮中形成 QC，那么根据属性 4，所有诚实的验证节点将在本地提交在 r'' 轮中提议的块。否则，由于 QC 是在这一轮中形成的，f + 1 个诚实的验证节点必须使用基于信誉的方案来确定 r'' 生成的一轮中的领导者，这意味着他们每个人都必须在本地提交一个轮次≥ r'' - 3 > r的块。根据引理 5，诚实的领导者 L 在一些 > r'' + 3 轮中发送提案。该提案必须基于至少一个来自 f + 1 验证节点的投票，因此，包含了更新后的 high_commit_qc，且与投票一样大的。因此，当提案最终交付给所有诚实的验证节点时，它允许他们在本地提交在 > r 的某轮中提出的块。
 
 Property 3. Let r be a round after GST. Every honest validator eventually locally commits some block B by calling Ledger.commit(B.id) for B.round > r.
@@ -635,9 +648,13 @@ Rounds are consecutive, advanced by quorum or timeout certificates, and honest v
 引理 7. 设 r 是尚未为其形成 QC，并且没有诚实的验证节点超时的轮次。当诚实的验证节点 v 根据第 r 轮的诚实领导者（根据 v）的提议调用 make_vote 时，它​​会返回投票消息（不是 ⊥）。
 
 证明 当诚实验证节点的安全模块调用 safe_to_vote 时，它​​会检查 (1) 轮数是单调递增的，并且 (2a) 连续的(block_round,qc_round) 是否成立，即该块扩展了前一轮的 QC，或者 (2b)它是基于上一轮TC的safe_to_extend。
+
 假设 block_round = r。对于 (1)，假设 2f + 1 个诚实的验证节点都没有超时，因此在第 r 轮中没有形成 TC。同样通过假设，没有形成QC。因此，没有诚实的验证节点可能会进入或投票大于 r 的轮次。第 r 轮有一个诚实的领导者，所以当诚实的验证节点为第 r 轮调用 make_vote 时，它​​是第一次这样做，并且是最多投票轮次。
+
 对于（2），我们考虑两种情况。如果last_round_tc = ⊥，则根据诚实领导者提议的结构正确性，它所扩展的high_qc的轮数必须为r-1，轮次是连续的，条件(a)成立。
+
 如果 last_round_tc 不为空，则它是第 r-1 轮的 TC，基于 2f +1 个超时消息形成。在 safe_to_extend 谓词中，右侧是 2f +1 超时消息中 high_qc 中的最大轮次。左侧的 qc_round 是领导者扩展的 QC 轮次。由于领导者是诚实的，因此它是在提案生成时领导者的 Block-Tree 的 high_qc。在这种情况下，条件 (b) 成立（safe_to_extend 的左侧不小于右侧），因为诚实的领导者更新其 Block-Tree 中的 high_qc 以使其轮数至少与它收到的每条超时消息中的 high_qc 一样大。
+
 我们首先展示某些类型的轮次的强同步性。
  
 Lemma 7. Let r be a round such that no QC has yet been formed for it and in which no honest validator has timed out. When an honest validator v invokes make_vote based on a proposal of an honest leader (according to v) of round r, it returns a vote message (not ⊥).
@@ -648,7 +665,9 @@ If last_round_tc is not empty, then it is a TC for round r−1, formed based on 
 We start by showing strong synchronization for certain types of rounds.
 
 引理 8. 假设所有诚实的验证节点都同意诚实的验证节点 v 是第 r 轮的领导者，并且 r 出现在 GST 之后。然后，所有诚实的验证节点在彼此相距 2Δ 的时间内进入第 r 轮。
+
 证明。当第一个诚实的验证节点进入第 r 轮时，如果它不是领导者，它一定已经形成了第 r-1 轮的 TC。在超时投票组成 TC 的 2f +1 个验证节点中，至少 f +1 个验证节点必须是诚实的。这些诚实的验证节点广播他们的超时消息，并且由于在 GST 之后，每个诚实的验证节点在时间 Δ 内至少观察到这些 f + 1 轮 r - 1 的超时消息。根据引理 4，第一个这样的超时消息会触发所有轮数小于 r-1 的诚实验证节点进入第 r-1 轮。然后，PaceMaker.process_remote_timeout 中的 Bracha 超时机制确保 r -1 轮中的诚实验证节点在收到 f +1 个 r -1轮  超时消息时立即超时。因此，在 2Δ 时间内，仍然在第 r-1 轮中的每个诚实验证节点观察到来自所有诚实方的第 r-1 轮超时消息，能够形成 2f + 1 个超时投票的 TC，并进入第 r 轮。
+
 验证节点 v 是第一个进入第 r 轮的诚实验证节点，或者所有诚实验证节点（包括 v）在第一个诚实验证节点之后的 2Δ 时间内进入第 r 轮。如果 v 是第一个进入第 r 轮的人，那么它会向所有将 v 视为领导者的诚实验证节点发送一个在时间 Δ 内到达的提案，引理 4 会驱动任何尚未进入第 r 轮的人这样做。
  
 Lemma 8. Suppose all honest validators agree that honest validator v is the round r leader and r occurs after GST. Then, all honest validators enter round r within a period of 2∆ from each other.
@@ -657,7 +676,9 @@ Proof. When the first honest validator enters round r, if it is not the leader, 
 Either validator v is the first among honest validators to enter round r, or all honest validators (including v) enter round r during a 2∆ time after the first honest validator. If v is the first to enter round r, then it sends a proposal that arrives within time ∆ to all honest validators that view v as the leader, by Lemma 4 triggering any that haven’t yet entered round r to do so.
 
 引理 9. 如果第 r 轮发生在 GST 之后，并且所有诚实验证节点就第 r 轮和 r+1 轮的诚实领导者达成一致，那么在第 r 轮提出的诚实块在第一个诚实验证节点进入第 r 轮的 5Δ 时间内全局直接提交.
+
 证明 根据引理 8，所有诚实的验证节点在启动计时器的 3Δ 时间内从领导者那里收到带有块 Br 的第 r 轮提议。根据引理 7，诚实的验证节点接受提案并投票支持。他们的选票在时间 Δ 内交付给第 r + 1 轮的领导者 L（他们都同意其身份）。 L 将形成一个扩展 Br 的 QC 并发送一个带有区块 Br+1 的提案。这个提议将在另一个 Δ 时间内被诚实的验证节点收到，引理 4 在本地计时器 5Δ 到期之前驱动他们进入第 r+1 轮。根据引理 7，每个诚实的验证节点都接受提案并准备投票（投票发送给验证节点认为是 r+2 轮领导者的任何人）。由于 f +1 个诚实验证节点调用 Safety.make_vote(Br+1,⊥)，根据定义 1，Br 是全局直接提交的。
+
 最后，我们展示了所有已提交的区块都由所有诚实的验证节点在本地提交。为此，诚实的验证节点必须不断观察提交证书 QC_Br+1，并将 QC_Br 扩展为块 Br 不断增加的轮数 r。这以流水线方式在短暂的时间范围内发生：
 
 Lemma 9. If round r occurs after GST and all honest validators agree on honest leaders for rounds r and r+1, then the honest block proposed in round r is globally direct-committed within 5∆ time of the first honest validator entering round r.
@@ -665,6 +686,7 @@ Proof. By Lemma 8, all honest validators receive round r proposal with block Br 
 Finally, we show that all the committed blocks get locally committed by all honest validators. For this, honest validators must keep observing commit certificates QC_Br+1 extending QC_Br for blocks Br for ever increasing rounds r. This happens within tight time bounds in a pipelined fashion:
 
 属性 4. 假设所有诚实的验证节点都同意 r,r + 1,r + 2 轮的诚实领导者，并且 r 发生在 GST 之后。 然后，每个诚实验证节点在第一个诚实验证节点进入第 r 轮时的 7Δ 时间内直接提交在第 r 轮中提出的诚实块。
+
 证明。 我们可以继续引理 9 的证明，进一步知道所有诚实的验证节点都同意第 r + 2 轮的领导者是某个诚实的验证节点 v。 在第一个诚实验证节点进入轮次r后最多 6Δ 时间内，v 接收投票去形成 r + 1 轮的 QC。
 
 然后它准备并发送包含和扩展 QC_Br+1 的第 r+2 轮提案。 在最多另一个 Δ 时间（总共 7Δ）之后，所有诚实的验证节点都会收到这个提议，导致他们在本地直接提交 Br。
@@ -684,6 +706,7 @@ We say that a honest validator v considers a validator L to be the leader of som
 引理 10. 设 B 是拜占庭验证节点 v 在第 r 轮中提出的已提交区块。 如果 v 是第 r' ≥ r + 3 轮的基于信誉的领导者，则在 r 和 r' 之间至少有 exclude_size - t + 1 个诚实提交的块。
 
 证明 将 v 视为第 r' 轮基于声誉的领导者的诚实验证节点都有在第 r' - 3 ≥ r 轮中提出的本地提交的块 B'。根据属性 2，B' 扩展了 B。last_authors 中的验证节点不能成为基于声誉的领导者，因此 v 不是从 br'-3 返回的已提交块的最后 exclude_size 个不同作者之一。
+
 因此，在 B（不包括）和 B0（包括）之间，即在 r 和 r' 之间，至少有不同的非 v 作者的 exclude_size 个块。 最多有包括 v的 t 个拜占庭验证器，因此这些块中至少 exclude_size - (t - 1) 个块必须是诚实的。
 
 下一个引理很容易从信誉机制的设计中得出。
@@ -694,6 +717,7 @@ Hence, there are at least exclude_size blocks by different non−v authors betwe
 The next lemma easily follows from the design of the reputation mechanism.
 
 引理 11. 令 r 轮是在 GST 之后的一轮，使得第 r 轮和 r + 1 轮根据轮询调度具有相同的诚实领导者。则必须提交在 r - 3、r - 2 或 r 轮之一中提出的块。
+
 证明 如果所有诚实的验证节点都使用轮询机制来确定第 r 轮和 r + 1 轮的领导者，那么引理 9 将适用，并且在第 r 轮中提出的块将被提交。 否则，必须提交在第 r-3 轮或第 r -2 轮中提议的块（由使用信誉方案的诚实验证节点在本地提交）。
 
 Lemma 11. Let round r be after GST such that rounds r and r + 1 have the same honest leader according to the round-robin schedule. A block proposed in one of the rounds r − 3, r − 2 or r must be committed.
@@ -702,22 +726,27 @@ Proof. If all honest validators used round-robin mechanism to determine the lead
 引理 12. 假设在 [r,r+6f+1] 轮中提出的 h 个诚实块被提交，其中 r 是 GST 之后的偶数轮。然后，在 [r-3,r +6f -2] 轮中会提出 ≥ 2f +1−3h 个提交的拜占庭块。
 
 证明 因为 r 是偶数，所以 [r,r + 6f + 1] 轮的轮询调度由 3f + 1 对轮次 (r,r + 1),...,(r + 6f,r + 6f + 1）组成，每对都有相同的，唯一的领导者（在这个时间表中）。根据轮询的时间表，其中 2f + 1 对有诚实的领导者。对于在第 r' 轮中提出的每个已提交的诚实块，我们取消以 2br'/2c、2br'/2c + 2 和 2br'/2c + 4 开头的对，即包含 r' 的对和后续两对.请注意，最多有 3h 对被取消资格，如果 2f + 1 > 3h，我们仍然可以找到 d = 2f + 1 - 3h 个的诚实验证节点，其轮对没有被取消资格。我们为这些诚实的验证节点建立了一个唯一对应的提交拜占庭区块，在 [r - 3,r + 6f - 2] 轮中提出，从而完成了论证。
+
 假设 v 是 d 个诚实验证节点之一，其对 (r',r' + 1) 没有被取消资格 - 即在 [r' - 4,r' + 1] 轮中没有提出诚实提交的块。根据引理 11，在 r' - 3 或 r' - 2 轮中提议的块必须被提交，并且根据上述推论，这个块必须是拜占庭的。剩下要证明的是，对于两个不同的诚实验证节点 v1 和 v2，分别具有轮询对 (r1,r1 +1) 和 (r2,r2 +1)，集合 {r1 − 3,r1 − 2} 和​​ {r2 − 3,r2 − 2} 是不相交的——因此相应的拜占庭提交是唯一的。 如果这些集合相交，则|r1 - r2| ≤ 1 成立，这对于不同的甚至 r1 和 r2 是不可能的。结果是在 [r - 3,r + 6f - 2] 轮中至少提出了 d 个拜占庭提交块。
 
 Lemma 12. Suppose h honest blocks proposed in rounds [r,r+6f+1] are committed, where r is an even round after GST. Then, there are ≥ 2f +1−3h committed Byzantine blocks proposed in rounds [r-3,r +6f −2].
 Proof. Because r is even, the round-robin schedule over rounds [r,r + 6f + 1] consists of 3f + 1 pairs of rounds (r,r + 1),...,(r + 6f,r + 6f + 1), each pair with the same, unique leader (in this schedule). 2f + 1 of these pairs have honest leaders according to the round-robin schedule. For each committed honest block that was proposed in round r', let us disqualify pairs that start with 2br'/2c, 2br'/2c + 2 and 2br'/2c + 4, i.e. the pair containing r' and the following two pairs. Note that at most 3h pairs get disqualified, and if 2f + 1 > 3h, we can still find d = 2f + 1 − 3h honest validators whose pairs of rounds aren’t disqualified. We establish a unique corresponding committed Byzantine block, proposed in rounds [r − 3,r + 6f − 2], for each of these honest validators, completing the argument.
 Let v be one of the d honest validators whose pair (r',r' + 1) isn’t disqualified - i.e. there are no honest committed blocks proposed in rounds [r' − 4,r' + 1]. By Lemma 11, a block proposed in rounds r' − 3 or r' − 2 has to be committed, and by the above, this block has to be Byzantine. It’s left to show that for two different honest validators v1 and v2 with round-robin pairs (r1,r1 +1) and (r2,r2 +1), respectively, the sets {r1 − 3,r1 − 2} and {r2 − 3,r2 − 2} are disjoint – hence the corresponding Byzantine commits are unique. |r1 − r2| ≤ 1 holds if these sets intersect, which is impossible for distinct and even r1 and r2. As a result, there are at least d Byzantine committed blocks proposed in rounds [r − 3,r + 6f − 2].  
 
-
 定理 13. 设 r 为 GST 之后的一轮。在接下来的 O(f log( (2f+1)/(2f+1-2t) )) 轮次中，至少有一个诚实块被提交。此外，在接下来的 O(f(log (2f+1)/(2f+1-2t) + exclude_size - t + 1)) 轮次中，至少有 exclude_size - t + 1 个诚实块被提交。
 
 证明。不失一般性，假设 r 是偶数（每轮最多一个提交块）。从 r 开始，我们考虑 6f + 6 轮的阶段并跟踪两个变量：hi 和 di，它们大致跟踪一个阶段中诚实（和拜占庭）提交块的数量。形式上，我们从 h0 = d0 = 0 开始。
 让第 i 阶段从第 ri = r+(6f +6)i 轮开始。根据引理 12，对于轮 ri +4，如果在轮 [ri + 4,ri + 6f + 5] 中提出的 δh 个诚实块被提交，那么在轮 [ri + 1,ri + 6f + 2]。请注意在第 ri + 6f + 2 轮和第 ri+1 = ri + 6f + 6 轮（下一阶段的开始）之间的 4 轮缓冲区。
 假设在提议 (2f + 1 − 3δh) 提交的拜占庭区块的拜占庭验证节点中，δd 在之前的阶段没有提交任何区块。我们设置 hi+1 = hi + δh 和 di+1 = di + δd。
+
 链 1。在 i 个阶段内有 exclude_size - t + 1 个诚实提交，或 2di + 5δd ≥ 2f + 1- 3δh。
+
 证明。我们可以假设在前一阶段提交区块的拜占庭验证节点不会在 [ri + 1,ri + 6f + 2] 轮中成为基于声誉的领导者。如果他们这样做了，引理 10 将适用（由于缓冲区，先前提交的块在轮次 ≤ ri-1 + 6f + 2 = ri - 4 中提出）并暗示 exclude_size - t + 1 诚实提交。因此，这些验证节点中的每一个都最多提出两次。
+
 我们还可以假设在 [ri + 1,ri + 6f + 2] 轮中，任何拜占庭验证节点最多提议 3 个提交区块作为基于信誉的领导者。否则，引理 10 再次暗示 exclude_size-t+1 诚实提交（任何四轮包含两个数字至少相隔 3）。在 [ri + 1,ri + 6f + 2] 轮中提议的具有已提交区块的剩余 δd 拜占庭验证节点中的每一个最多可能有 5 个提交，包括 ≤ 2 个作为循环领导者提议的区块。
+
 在下文中，我们继续应用权利要求 1。由于 exclude_size - t + 1 诚实提交立即完成了定理的证明，因此假设所考虑的阶段为 2di + 5δd ≥ 2f + 1 - 3δh。如果 δh > 0 则称 i 相为 H 相，如果 δh = 0 则称其为 D 相。那么，我们有：
+
 权利要求 2：在每个 D 阶段之后，数量 2f + 1 - 2di 至少减少 3/5 倍。
 
 证明。在 D 相中，我们有 δh = 0。因此，根据权利要求 1，我们有 δd ≥ (2f+1-2di)/5。然后，
@@ -725,7 +754,9 @@ Let v be one of the d honest validators whose pair (r',r' + 1) isn’t disqualif
 (2f+1-2d_i+1) / (2f+1-2di) = 1 - (2δd / (2f+1-2di)) ≤ 1 - 2/5 = 3/5
 
 根据定义，di ≤ t，意味着 2f+1−di ≥ 2f+1−2t。因此，D相最多可以出现log5/3(2f+1)/(2f+1-2t) = O(log(2f+1)/(2f+1-2t))次，也是最大的第一个 H 相之前的相数。因此，至少在 O(log (2f+1)/(2f+1-2t)) 阶段提交至少一个诚实块，即 O(f log (2f+1)/(2f+1-2t))回合。
+
 对于定理的第二部分，请注意相数是 D 相的最大数量加上 exclude_size - t + 1。这些至少包含 exclude_size - t + 1 个 H 相，这意味着所需的 exclude_size - t + 1诚实的承诺。
+
 推论 1. 对于 t = f 和 exclude_size = 2f，在最坏的情况下，链质量是每个诚实提交的 O(f logf) 次提交，平均每个诚实提交的 O(f) 次提交。
 
 Theorem 13. Let r be a round after GST. At least one honest block proposed among the next O(f log( (2f+1)/(2f+1-2t) )) rounds gets committed. Moreover, at least exclude_size − t + 1 honest blocks proposed among the next O(f(log (2f+1)/(2f+1-2t) + exclude_size - t + 1)) rounds get committed.
@@ -751,16 +782,19 @@ Corollary 1. For t = f and exclude_size = 2f, chain quality is O(f logf) commits
 领导者利用率属性与针对崩溃失败的协议效率有关。 因此，我们考虑 GST 之后的时间，以及最多 f 个可能崩溃但不是拜占庭的验证器。 如果验证器在崩溃时 PaceMaker.current_value = r，我们说验证器在第 r 轮崩溃。 令 tr 为在第 r 轮中崩溃的验证节点数量。
 如果验证节点在 ≤ r 轮中没有崩溃，我们称验证节点在第 r 轮中存活。 让我们定义 p = [ 3*window_size / (2f+1)]。
 
-
 Leader utilization property is concerned with the protocol efficiency against crash failures. Therefore, we consider time after GST, and at most f validators that can crash, but aren’t byzantine. We say that a validator crashes in round r if it has PaceMaker.current_value = r at the time of the crash. Let tr be the number of validators that crash in round r.
 We call a validator live in a round r, if doesn’t crash in a round ≤ r. Let us define p = [ 3*window_size / (2f+1)].
 
 引理 14. 假设 tr > 0 并且轮 r 发生在 GST 之后。定义 r' = r + (p + 1)(6f + 6) − 1 并令 r'' 是最小的整数，使得 r'' > r 并且 t(r'') > 0，如果没有轮次存在，则为 ∞。然后，轮 r',...r'' - 1 都有所有未崩溃的验证节点都同意的实时领导者。
 
 证明。我们假设 r'' > r'，否则没有什么可以证明的。
+
 由于拜占庭验证器可以被限制为崩溃行为，我们可以应用引理 12 p 次：从第 2[r/2] + 4 轮开始，然后从第 2[r/2] + 6f + 6 轮等开始，最后从第2[r/2] + (p - 1)(6f + 6)开始。我们可以发现，至少在 r + 1,...(r' - 6f - 6) 轮中提出的窗口大小块被提交。在小于等于 r 的轮次中崩溃的验证器无法验证这些块，因此在确定基于信誉的轮次 (r' - 6f - 2),...,r'' 的领导者时，它们总是被排除在 active_validators 之外。
+
 我们在下面展示了 (r' -6f -3),...,r' 中的某个回合将有一个基于声誉的领导者 L，它知道自己是领导者，并在前一轮的投票中形成一个 QC。它没有拜占庭行为，所以 L 知道它是基于信誉的领导者，意味着它的 QC 必须扩展上一轮的 QC，这必须是前 3 轮提议的块的提交证书。因此，从这一点到第 r'' 轮，所有验证节点都将通过信誉方案确定领导者。正如我们所展示的，这些以声誉为基础的领导者是存活的。由于协议（属性 2）以及基于信誉的领导者是根据已提交的块确定的事实，验证节点永远不会在他们的身份上存在分歧。
+
 最多 f 个验证器可能会崩溃，因此通过轮询结构，我们可以找到 r' -6f -3 ≤ s ≤ r' -6 的 s 使得轮的领导者 s,s + 1,...s + 5根据轮询时间表都保持存活状态。如果在所有轮次 s+1,s+2,s+3 中，允许一个领导者对上一轮的提案进行投票并形成一个 QC，那么我们就完成了证明，因为第 s+3 轮的领导者将以信誉为基础。但是，如果 QC 从未在 s,s + 1,s + 2 中的某个轮次（提案中）形成，那么接下来的 3 轮将必然会有所有验证节点都同意的基于轮转的领导者。属性 4 将会取得进展，触发所有后来的基于声誉（并且活着）的领导者（直到第 r'' 轮）。
+
 如果系统有 t ≤ f 个实际的崩溃失败，领导者利用率属性通过将引理 14 应用于最多 t 轮崩溃失败。
 
 

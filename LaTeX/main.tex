@@ -1,7 +1,32 @@
 \documentclass{ctexart}
 
-\tableofcontents
+\usepackage{graphicx} % insert image
+\usepackage{float}
+
+% \usepackage{algorithm} % algorithm environment
+% \usepackage{algpseudocode}  
+
+\title{DiemBFT v4: Diem 区块链中的复制状态机}
+\author{The Diem Team}
+\date{2021年8月18日}
 
 \begin{document}
-“你好，世界！”来自 \LaTeX{} 的问候。
+
+\maketitle
+
+\input{content/abstract}
+
+\input{content/introduction}
+
+\input{content/problem-definition}
+
+\input{content/diembft-protocol}
+
+\input{content/proof-of-correctness}
+
+\input{content/acknowledgements}
+
+\include{content/references}
+
+
 \end{document}

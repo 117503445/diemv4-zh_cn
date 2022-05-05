@@ -6,5 +6,5 @@
 # $preview_continuous_mode = 1;
 
 $pdf_mode = 5;
-$pdflatex=q/xelatex -synctex=1 %O %S/;
+$xelatex=q/xelatex -synctex=1 -halt-on-error %O %S/;
 @default_files = ('main.tex');
